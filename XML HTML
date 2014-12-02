@@ -1,0 +1,180 @@
+import requests
+import urllib.request
+import bs4
+import os
+
+# Human Readable Dependency Tree:
+# Python 3
+#     Requests
+#     BeautifulSoup 4
+# All can be installed through pip ( https://pip.pypa.io/en/latest/installing.html )
+
+#A rough tool thrown together in about an hour that pulls emotes from FrankerFaceZ,
+#saving them locally and generating an XML/HTML file.
+#Since raidcall can't hotlink from FFZ for some reason, you must upload the images
+#to your own host and specify it when the program asks where you want to
+#point the XML/HTML file.
+#
+#Be aware that this is a very basic hack that has many caveats; here are the biggest:
+# - Since the xml requires sequential ids, attempting to generate an xml
+#   from a different set of channels or even the same channels in a different order
+#   will cause a mismatch. This is why overwrite/redownload defaults to Y.
+# - For each emote you add, a dummy .png needs to be added to the Raidcall/smilies folder.
+#   Just copy and paste one that already exists and increment the file name.
+# - Not user friendly, you need to look at the code to determine formats.
+#
+# I recommend an admin to run this script, then upload the files to the server,
+# then send the other users the xml/html. That way FFZ doesn't complain about bandwidth usage.
+
+#Constants
+FFZ = 'http://cdn.frankerfacez.com/channel/'
+
+HTMLPRE = """<!DOCTYPE html PUBLIC "-//W3C//Dli XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/Dli/xhtml1-transitional.dli">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<script type="text/tiscript" src="html/js/common.js"></script>
+<script type="text/tiscript">function activeSkin() { changeSkin(getSkinData()); }</script>
+<style type="text/css">
+* {padding:0; margin:0}
+li {list-style:none}
+body {font:system}
+
+.smilesTable {width:260px; height:568px; border-left:1px solid #E3E9F6; border-top:1px solid #E3E9F6}
+.smilesTable li {border-bottom:1px solid #E3E9F6; border-right:1px solid #E3E9F6; width:23px; height:23px; float:left}
+.smilesTable img {width:89px; height:89px; transition:1}
+.smilesTable img:hover {transition:image}
+.smilesTable span {display:inline-block; border:5px solid #FFF; margin:1px; padding:6px}
+.smilesTable span:hover { border-color:#5898FF}
+
+_service > popup[role=tooltip] {padding:5px 10px; font-size:22px; border-radius:6px}
+</style>
+</head>
+<body>
+<ul class="smilesTable">
+"""
+
+HTMLPOST = """</ul>
+</body>
+</html>"""
+
+def AwesomeUI():
+    print("""
+    ######################################################
+    ###          FFZDownloader = Emotes Pls            ###
+    ###                 (no space)                     ###
+    ######################################################
+    
+    Please read the comments at the top of this code before using the script.
+    It is non-destructive, but will download data to your hard drive.
+    
+    """)
+
+def scraperino(channel):
+    response = requests.get(FFZ + channel)
+    soup = bs4.BeautifulSoup(response.text)
+    pageLinks = [a.attrs.get('href') for a in soup.find_all('a')]
+    pageImages = list(pageLinks[5:])
+    return pageImages
+
+def getFile(channel,imageName):
+    url = FFZ + channel + "/" + imageName
+    urllib.request.urlretrieve(url,imageName)
+
+def GenerateXML(url, image, ct):
+    i = str(ct)
+    returned = ("<face id=\"" + i + "\" file=\"" + image + ".png\" title=\"" + image + "\"><![CDATA[][image=" + url + "][/image]]></face>")
+    return returned
+    
+def GenerateHTML(url, image, ct):
+    i = str(ct)
+    returned = "<li><span><img id=\"" + i + "\" alt=\"" + image.rstrip(".png") + "\" src=\"" + url + "\" /></span></li>"
+    return returned
+
+    
+def main():
+    #Show UI
+    AwesomeUI()
+    userCmd = input("Enter to continue:")
+    makingList = True
+    channelList = []
+    #if userCmd == '1':
+    #    pass
+    #    #Read from file.
+    #elif userCmd == '2':
+    if True: #lol didn't want to feature creep
+        while makingList == True:
+            thingerino = input("Enter a channel name (case sensitive): ")
+            channelList.append(thingerino)
+            userContinue = input("Have another channel? (Y/N) ")
+            if userContinue != "Y":
+                makingList = False
+    else:
+        raise SystemExit
+    
+    #Check/make directory "Files"
+    print("Checking files directory...")
+    if not os.path.exists("Files"):
+        print("No files directory found. Creating...")
+        os.mkdir("Files")
+        os.chdir("Files")
+    else:
+        print("Files directory already exists. Because the html files number the images,"
+        + "\nyou must redownload the files if you are using a different collection of channels."
+        + "\nIf you selected the exact same collection of channels as you did when downloading,"
+        + "\nand they are in the same order,"
+        + "\nyou may press N to skip the download.")
+        
+        ovrInput = input("Overwrite? (Y/N; default Y) ")
+        os.chdir("Files")
+    
+    if ovrInput != "N":
+        for c in channelList:
+            channelImageList = scraperino(c)
+            for i in channelImageList:
+                getFile(c,i)
+    
+    #Change to xml dir.
+    #Now it's time to try and generate the xml:
+    
+    os.chdir("..")
+    
+    print("Attempting to generate xml file:")
+    if not os.path.exists("xml"):
+        print("Creating xml directory...")
+        os.mkdir("xml")
+        os.chdir("xml")
+    else:
+        os.chdir("xml")
+        
+    XURL_PREFIX = input("Paste the URL prefix to where the files are hosted here, without the image or channel name.\n"
+        + "For example, if the image is located at \nhttp://cdn.frankerfacez.com/channel/global/ZreknarF.png ,\n"
+        + "the URL prefix would be \nhttp://cdn.frankerfacez.com/channel/\n:")
+    #now in xml dir
+    f = open("cfg.xml","w")
+    g = open("smiles.html","w")
+    f.write('<faces>\n') #open tag
+    g.write(HTMLPRE) #Template pasterino
+    imageCounter = 1
+    for c in channelList:
+        channelImageList = scraperino(c)
+        for i in channelImageList:
+            if i != "Thumbs.db":
+                imgloc = XURL_PREFIX + c + "/" + str(i)
+                imgname = str(i).rstrip(".png")
+                x = GenerateXML(imgloc,imgname,imageCounter)
+                if (imageCounter == 1 or imageCounter == 2):
+                    f.write("    " + x + '\n')
+                else:
+                    f.write(x + '\n')
+                h = GenerateHTML(imgloc,imgname,imageCounter)
+                if (imageCounter == 1 or imageCounter == 2):
+                    g.write("  " + h + '\n')
+                else:
+                    g.write(h + '\n')
+                imageCounter = imageCounter + 1
+    f.write('</faces>\n') #close tag
+    g.write(HTMLPOST)
+    print("COMPLETE!")
+    
+main()
